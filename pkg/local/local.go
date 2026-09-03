@@ -11,30 +11,60 @@ import (
 
 type Runner struct {
 	TracePath string
+	Dir       string
+	Worker    string
+	Shell     string
 }
 
 func NewRunner(tracePath string) *Runner {
-	return &Runner{TracePath: tracePath}
+	return &Runner{
+		TracePath: tracePath,
+		Dir:       ".",
+		Worker:    "default-worker",
+	}
 }
 
 func (r *Runner) RunCommand(ctx context.Context, name string, args ...string) (int, error) {
+	if r.TracePath == "" {
+		r.TracePath = "trace.jsonl"
+	}
 	logger, err := trace.NewLogger(r.TracePath)
 	if err != nil {
 		return -1, err
 	}
 
-	logger.Log("start", map[string]any{"command": name, "args": args})
+	logger.Log("start", map[string]any{
+		"worker":  r.Worker,
+		"command": name,
+		"args":    args,
+		"dir":     r.Dir,
+	})
 
 	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
+	shellToUse := r.Shell
+	if shellToUse == "" {
+		if runtime.GOOS == "windows" {
+			shellToUse = "cmd.exe"
+		} else {
+			shellToUse = "sh"
+		}
+	}
+
+	if runtime.GOOS == "windows" && shellToUse == "cmd.exe" {
 		shellArgs := append([]string{"/c", name}, args...)
-		cmd = exec.CommandContext(ctx, "cmd.exe", shellArgs...)
-	} else {
+		cmd = exec.CommandContext(ctx, shellToUse, shellArgs...)
+	} else if shellToUse == "sh" || shellToUse == "bash" {
 		fullCmd := name
 		for _, arg := range args {
 			fullCmd += " " + arg
 		}
-		cmd = exec.CommandContext(ctx, "sh", "-c", fullCmd)
+		cmd = exec.CommandContext(ctx, shellToUse, "-c", fullCmd)
+	} else {
+		cmd = exec.CommandContext(ctx, name, args...)
+	}
+
+	if r.Dir != "" {
+		cmd.Dir = r.Dir
 	}
 
 	cmd.Stdout = os.Stdout
@@ -54,9 +84,10 @@ func (r *Runner) RunCommand(ctx context.Context, name string, args ...string) (i
 	}
 
 	logger.Log("command", map[string]any{
-		"command":   name,
-		"args":      args,
-		"exit_code": exitCode,
+		"worker":      r.Worker,
+		"command":     name,
+		"args":        args,
+		"exit_code":   exitCode,
 		"duration_ms": duration.Milliseconds(),
 	})
 

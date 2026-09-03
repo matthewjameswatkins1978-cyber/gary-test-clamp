@@ -7,10 +7,10 @@ import (
 )
 
 type BatchSpec struct {
-	Name        string            `json:"name"`
-	TaskGroups  []TaskGroup       `json:"taskGroups"`
+	Name             string           `json:"name"`
+	TaskGroups       []TaskGroup      `json:"taskGroups"`
 	AllocationPolicy AllocationPolicy `json:"allocationPolicy"`
-	LogsPolicy  LogsPolicy        `json:"logsPolicy"`
+	LogsPolicy       LogsPolicy       `json:"logsPolicy"`
 }
 
 type TaskGroup struct {
@@ -18,7 +18,8 @@ type TaskGroup struct {
 }
 
 type TaskSpec struct {
-	Runnables []Runnable `json:"runnables"`
+	Runnables []Runnable     `json:"runnables"`
+	ComputeResource *ComputeResource `json:"computeResource,omitempty"`
 }
 
 type Runnable struct {
@@ -41,29 +42,49 @@ type LogsPolicy struct {
 	Destination string `json:"destination"`
 }
 
-func GenerateSpec(jobName, serviceAccount, image string) BatchSpec {
-	return BatchSpec{
-		Name: jobName,
-		TaskGroups: []TaskGroup{
-			{
-				TaskSpec: TaskSpec{
-					Runnables: []Runnable{
-						{Script: "echo 'Running Telltail container workload: " + image + " as " + serviceAccount + "'"},
-					},
-				},
-			},
-		},
-		AllocationPolicy: AllocationPolicy{
-			Instances: []InstancePolicy{
+type ServiceAccount struct {
+	Email string `json:"email"`
+}
+
+type ComputeResource struct {
+	CPUMilli int64 `json:"cpuMilli"`
+	MemoryMib int64 `json:"memoryMib"`
+}
+
+// Extended spec to hold service account explicitly if needed for JSON matching
+type GCPBatchSpec struct {
+	BatchSpec
+	ServiceAccount ServiceAccount `json:"serviceAccount"`
+}
+
+func GenerateSpec(jobName, serviceAccount, image string) GCPBatchSpec {
+	return GCPBatchSpec{
+		BatchSpec: BatchSpec{
+			Name: jobName,
+			TaskGroups: []TaskGroup{
 				{
-					Policy: MachinePolicy{
-						MachineType: "e2-medium",
+					TaskSpec: TaskSpec{
+						Runnables: []Runnable{
+							{Script: "echo 'Running Telltail container workload: " + image + " as " + serviceAccount + "'"},
+						},
 					},
 				},
 			},
+			AllocationPolicy: AllocationPolicy{
+				Instances: []InstancePolicy{
+					{
+						Policy: MachinePolicy{
+							MachineType: "e2-medium",
+						},
+					},
+				},
+			},
+			LogsPolicy: LogsPolicy{
+				Destination: "CLOUD_LOGGING",
+			},
 		},
-		LogsPolicy: LogsPolicy{
-			Destination: "CLOUD_LOGGING",
+		ServiceAccount: ServiceAccount{
+			Email: serviceAccount,
 		},
 	}
 }
