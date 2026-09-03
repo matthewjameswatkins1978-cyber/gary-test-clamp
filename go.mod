@@ -1,3 +1,3 @@
-module clamp
+module telltail
 
 go 1.24.0
